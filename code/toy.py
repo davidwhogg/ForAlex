@@ -1,8 +1,8 @@
-y"""
+"""
 Code to take non-trivial p(z|d) data and infer dN/dz..
 """
-
 import numpy as np
+import scipy.optimize as op
 
 trueamps = np.array([0.20, 0.35, 0.55])
 trueamps /= np.sum(trueamps)
@@ -19,13 +19,11 @@ def make_one_ztrue():
             if r > cumamps[k-1]:
                 c = k
         ztrue = truemeans[c] + truesigmas[c] * np.random.normal()
-        print(c, ztrue)
     return ztrue
 
 def sample_true_prior(N):
     print("Making ztrue values...")
     ztrues = np.array([make_one_ztrue() for n in range(N)])
-    print(ztrues)
     return ztrues
 
 def evaluate_true_prior(zs):
@@ -95,28 +93,43 @@ def get_rectangular_data(zobss):
 def hyper_lfs(data, lnamps):
     amps = np.exp(lnamps - np.max(lnamps))
     amps /= np.sum(amps)
-    print(data.shape)
-    print(lnamps.shape)
-    print(amps.shape)
-    print(interim.shape)
     return np.sum(amps[None,:] * data / interim[None,:], axis=1)
 
 def hyper_lnlf(data, lnamps):
     return np.sum(np.log(hyper_lfs(data, lnamps)))
 
+prior_var = np.eye(K)
+for k in range(K):
+    prior_var[k] = 1. * np.exp(-0.5 * (zcoarse[k] - zcoarse) ** 2 / 0.05 ** 2)
+print(prior_var)
+prior_ivar = np.linalg.inv(prior_var)
+
 def hyper_lnprior(lnamps):
     """
     Stupid Gaussian prior.
     """
-    return -0.5 * np.sum((lnamps - 0.) ** 2 / 1.)
+    return -0.5 * np.dot(np.dot(prior_ivar, lnamps), lnamps)
 
 def hyper_lnposterior(lnamps, data):
     return hyper_lnprior(lnamps) + hyper_lnlf(data, lnamps)
 
+def optimize_lnposterior(data):
+    def _objective(pars, data):
+        return -2. * hyper_lnposterior(pars, data)
+    guess = np.sum(data, axis=0)
+    guess /= np.sum(guess) * dzcoarse
+    guess = np.log(guess)
+    print("starting at", guess, _objective(guess, data))
+    res = op.minimize(_objective, guess, args=(data, ), method="Nelder-Mead",
+                      options={"maxfev": 1e5, "maxiter":1e4})
+    print(res)
+    return res
+
 if __name__ == "__main__":
     import matplotlib.pylab as plt
+    np.random.seed(42)
+    N = 2 ** 15
 
-    N = 10000
     ztrues = sample_true_prior(N)
     nplot = 1000
     zplot = np.arange(0.5 / nplot, 1.0, 1.0 / nplot)
@@ -155,3 +168,14 @@ if __name__ == "__main__":
     print("hyperposterior at truth:", hyper_lnposterior(guess, data))
     guess = np.log(interim)
     print("hyperposterior at interim prior:", hyper_lnposterior(guess, data))
+    res = optimize_lnposterior(data)
+    map = np.exp(res.x)
+    map /= np.sum(map) * dzcoarse
+
+    plt.clf()
+    plt.hist(zobss, bins=100, normed=True, color="k", alpha=0.25)
+    plt.plot(zplot, evaluate_true_prior(zplot), "r-")
+    plt.plot(zcoarse, np.sum(data, axis=0) / N, "go")
+    plt.plot(zcoarse, map, "ko")
+    plt.xlabel("ztrue")
+    plt.savefig("map.png")
