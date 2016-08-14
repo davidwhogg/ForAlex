@@ -41,7 +41,7 @@ def evaluate_true_prior(zs):
 true_lf_sigma = 0.05
 true_lf_outlier_fraction = 0.2
 true_lf_outlier_mean = 0.4
-true_lf_outlier_sigma = 0.1
+true_lf_outlier_sigma = 0.075
 
 def sample_likelihood(ztrue):
     if np.random.uniform() < true_lf_outlier_fraction:
@@ -100,7 +100,7 @@ def hyper_lnlf(data, lnamps):
 
 prior_var = np.eye(K)
 for k in range(K):
-    prior_var[k] = 1. * np.exp(-0.5 * (zcoarse[k] - zcoarse) ** 2 / 0.05 ** 2)
+    prior_var[k] = 1. * np.exp(-0.5 * (zcoarse[k] - zcoarse) ** 2 / 0.10 ** 2)
 print(prior_var)
 prior_ivar = np.linalg.inv(prior_var)
 
@@ -128,7 +128,7 @@ def optimize_lnposterior(data):
 if __name__ == "__main__":
     import matplotlib.pylab as plt
     np.random.seed(42)
-    N = 2 ** 15
+    N = 2 ** 16
 
     ztrues = sample_true_prior(N)
     nplot = 1000
@@ -175,7 +175,6 @@ if __name__ == "__main__":
     plt.clf()
     plt.hist(zobss, bins=100, normed=True, color="k", alpha=0.25)
     plt.plot(zplot, evaluate_true_prior(zplot), "r-")
-    plt.plot(zcoarse, np.sum(data, axis=0) / N, "go")
     plt.plot(zcoarse, map, "ko")
     plt.xlabel("ztrue")
     plt.savefig("map.png")
